@@ -1,0 +1,30 @@
+{
+  "name": "snapcache",
+  "version": "1.0.0",
+  "description": "Zero-config caching for any function",
+  "type": "module",
+  "main": "src/index.js",
+  "browser": "./src/index.js",
+  "exports": "./src/index.js",
+  "files": [
+    "src/index.js",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "keywords": [
+    "cache",
+    "memoize",
+    "deduplication",
+    "async",
+    "dedupe",
+    "async"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=16"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "repository": "github:Sampad6701/snap-cache"
+}

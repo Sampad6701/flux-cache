@@ -1,1 +1,113 @@
-# snap-cache
+
+# snapcache
+
+Zero-config caching for any function. Eliminates duplicate API calls, deduplicates concurrent requests, and skips manual cache management.
+
+**1.2KB gzipped. Zero dependencies. Framework-agnostic.**
+
+## The Problem
+
+Without caching, parallel calls to the same function execute redundantly:
+
+```js
+// Three identical calls = three executions
+const user1 = await fetchUser(42);
+const user2 = await fetchUser(42);
+const user3 = await fetchUser(42);
+```
+
+snapcache collapses these into one:
+
+```js
+const cached = cache(fetchUser);
+const user1 = await cached(42);
+const user2 = await cached(42);  // Reuses same Promise
+const user3 = await cached(42);  // Reuses same Promise
+```
+
+## Install
+
+```bash
+npm install snapcache
+```
+
+## Usage
+
+```js
+import { cache } from "snapcache";
+
+const getUser = cache(
+  async (id) => {
+    const response = await fetch(`/api/users/${id}`);
+    return response.json();
+  },
+  { ttl: 30_000 }
+);
+
+const a = getUser(42);
+const b = getUser(42);
+
+console.log(a === b); // true
+```
+
+## Features
+
+- Works with sync and async functions
+- Deduplicates concurrent async calls
+- TTL-based expiration (milliseconds)
+- Errors and rejections are never cached
+- Custom key generation support
+- Manual cleanup with `clear()` and `delete()`
+
+## API
+
+```js
+const cached = cache(fn, options);
+```
+
+Options:
+
+- `ttl` - Cache lifetime in ms. Default: `Infinity`
+- `key` - Custom key generator. Default: `(...args) => JSON.stringify(args)`
+- `onHit` - Called when cached value is reused
+- `onMiss` - Called when fn executes
+
+Methods:
+
+- `cached.clear()` - Remove all entries
+- `cached.delete(...args)` - Remove single entry by arguments
+
+## Examples
+
+Sync memoization:
+
+```js
+const square = cache((n) => n * n);
+square(5); // 25
+square(5); // cache hit
+```
+
+Custom key:
+
+```js
+const findUser = cache(
+  (user) => user.name,
+  { key: (user) => user.id }
+);
+```
+
+Hooks:
+
+```js
+const read = cache(expensiveOp, {
+  onHit: (key) => console.log("reused:", key),
+  onMiss: (key) => console.log("executed:", key)
+});
+```
+
+## Notes
+
+- Expired entries are removed lazily on next access
+- `ttl: 0` deduplicates concurrent calls but doesn't cache results
+- Provide a custom `key` function if arguments aren't JSON-serializable
+- No timers are used; cleanup is passive
