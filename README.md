@@ -96,6 +96,23 @@ const findUser = cache(
 );
 ```
 
+Real-world custom key example:
+
+```js
+// Without custom key, [POST /users?filter=active], [GET /users?filter=active]
+// would be different cache entries even though they're semantically similar
+const fetchUsers = cache(
+  async (endpoint, query) => {
+    const res = await fetch(`${endpoint}?${new URLSearchParams(query)}`);
+    return res.json();
+  },
+  {
+    // Normalize query params to consistent key
+    key: (endpoint, query) => `${endpoint}:${JSON.stringify(query)}`
+  }
+);
+```
+
 Hooks:
 
 ```js
@@ -107,7 +124,18 @@ const read = cache(expensiveOp, {
 
 ## Notes
 
-- Expired entries are removed lazily on next access
-- `ttl: 0` deduplicates concurrent calls but doesn't cache results
-- Provide a custom `key` function if arguments aren't JSON-serializable
-- No timers are used; cleanup is passive
+**Key Serialization:**
+- Default key function uses `JSON.stringify(args)`, which works for primitives, arrays, and plain objects
+- For non-serializable arguments (class instances, functions, circular refs), provide a custom `key` function
+- Object property order matters: `{ a: 1, b: 2 }` and `{ b: 2, a: 1 }` produce different keys
+
+**TTL Behavior:**
+- `ttl: Infinity` (default) — Cache never expires unless manually cleared
+- `ttl: 0` — Deduplicates concurrent calls but doesn't persist results; expires immediately
+- Expired entries are removed lazily on next access (no background timers)
+
+**Memory Management:**
+- For long-running processes with many unique keys, consider:
+  - Using finite TTLs to allow automatic cleanup
+  - Periodically calling `cached.clear()` to reset the cache
+  - Using a custom `key` function to normalize arguments and reduce cache entropy

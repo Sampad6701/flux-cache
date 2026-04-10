@@ -1,6 +1,6 @@
 {
   "name": "snapcache",
-  "version": "1.0.0",
+  "version": "0.2.0",
   "description": "Zero-config caching for any function",
   "type": "module",
   "main": "src/index.js",
