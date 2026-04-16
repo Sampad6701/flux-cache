@@ -1,13 +1,20 @@
 {
   "name": "snapcache",
-  "version": "0.2.0",
-  "description": "Zero-config caching for any function",
+  "version": "0.3.0",
+  "description": "Lightweight async-aware caching with deduplication, stale-while-revalidate, and zero-config API",
   "type": "module",
-  "main": "src/index.js",
+  "main": "./src/index.js",
   "browser": "./src/index.js",
-  "exports": "./src/index.js",
+  "types": "./src/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.js",
+      "types": "./src/index.d.ts"
+    }
+  },
   "files": [
     "src/index.js",
+    "src/index.d.ts",
     "README.md"
   ],
   "sideEffects": false,
@@ -16,8 +23,8 @@
     "memoize",
     "deduplication",
     "async",
-    "dedupe",
-    "async"
+    "swr",
+    "performance"
   ],
   "license": "MIT",
   "engines": {
@@ -26,5 +33,12 @@
   "scripts": {
     "test": "node --test test/*.test.js"
   },
-  "repository": "github:Sampad6701/snap-cache"
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Sampad6701/snap-cache.git"
+  },
+  "homepage": "https://github.com/Sampad6701/snap-cache#readme",
+  "bugs": {
+    "url": "https://github.com/Sampad6701/snap-cache/issues"
+  }
 }
