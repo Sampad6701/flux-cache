@@ -35,10 +35,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Sampad6701/snap-cache.git"
+    "url": "git+https://github.com/Sampad6701/flux-cache.git"
   },
-  "homepage": "https://github.com/Sampad6701/snap-cache#readme",
+  "homepage": "https://github.com/Sampad6701/flux-cache#readme",
   "bugs": {
-    "url": "https://github.com/Sampad6701/snap-cache/issues"
+    "url": "https://github.com/Sampad6701/flux-cache/issues"
   }
 }
