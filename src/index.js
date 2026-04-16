@@ -48,26 +48,26 @@ function getExpiresAt(ttl, now = Date.now()) {
 
 export function cache(fn, options = {}) {
   if (typeof fn !== "function") {
-    throw new TypeError("snapcache: expected fn to be a function");
+    throw new TypeError("fluxcache: expected fn to be a function");
   }
 
   const { ttl = DEFAULT_TTL, key = defaultKey, onHit, onMiss, swr = true } = options;
   const ttlMs = ttl == null ? DEFAULT_TTL : Number(ttl);
 
   if (!(ttlMs >= 0 || ttlMs === Infinity)) {
-    throw new TypeError("snapcache: expected ttl to be a non-negative number");
+    throw new TypeError("fluxcache: expected ttl to be a non-negative number");
   }
 
   if (typeof key !== "function") {
-    throw new TypeError("snapcache: expected key to be a function");
+    throw new TypeError("fluxcache: expected key to be a function");
   }
 
   if (onHit != null && typeof onHit !== "function") {
-    throw new TypeError("snapcache: expected onHit to be a function");
+    throw new TypeError("fluxcache: expected onHit to be a function");
   }
 
   if (onMiss != null && typeof onMiss !== "function") {
-    throw new TypeError("snapcache: expected onMiss to be a function");
+    throw new TypeError("fluxcache: expected onMiss to be a function");
   }
 
   const store = new Map();

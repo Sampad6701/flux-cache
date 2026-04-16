@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] - 2026-04-10
 
 ### Added
-- Initial release of snapcache
+- Initial release of flux cache
 - Zero-config caching for sync and async functions
 - Async call deduplication with Promise reuse
 - TTL-based cache expiration

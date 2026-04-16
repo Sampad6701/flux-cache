@@ -1,5 +1,5 @@
 {
-  "name": "snapcache",
+  "name": "fluxcache",
   "version": "0.3.0",
   "description": "Lightweight async-aware caching with deduplication, stale-while-revalidate, and zero-config API",
   "type": "module",
