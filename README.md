@@ -1,5 +1,8 @@
 # flux cache
 
+![npm](https://img.shields.io/npm/v/fluxcache)
+![bundle size](https://img.shields.io/bundlephobia/minzip/fluxcache)
+
 Zero-config async caching with automatic promise deduplication, stale-while-revalidate, and built-in observability.
 
 **1.2KB gzipped. Zero dependencies. Framework-agnostic.**
