@@ -1,31 +1,65 @@
-# flux cache
+# fluxcache
 
 ![npm](https://img.shields.io/npm/v/fluxcache)
 ![bundle size](https://img.shields.io/bundlephobia/minzip/fluxcache)
 
-Zero-config async caching with automatic promise deduplication, stale-while-revalidate, and built-in observability.
+**Stop duplicate async calls. Add TTL + stale-while-revalidate caching in ~1.2KB.**
 
-**1.2KB gzipped. Zero dependencies. Framework-agnostic.**
+`fluxcache` wraps any function and gives it Promise deduplication, TTL caching, stale-while-revalidate, stable argument keys, and built-in stats. Zero deps. Node and browser. Framework-agnostic.
 
-## The Problem
-
-Without caching, parallel calls to the same function execute redundantly:
-
-```js
-// Three identical calls = three executions
-const user1 = await fetchUser(42);
-const user2 = await fetchUser(42);
-const user3 = await fetchUser(42);
+```bash
+npm install fluxcache
 ```
 
-flux cache collapses these into one:
+```js
+import { cache } from "fluxcache";
+
+const getUser = cache(fetchUser, { ttl: 30_000 });
+```
+
+## Before / After
+
+Without `fluxcache`, three identical in-flight calls usually mean three network requests:
 
 ```js
-const cached = cache(fetchUser);
-const user1 = await cached(42);
-const user2 = await cached(42);  // Reuses same Promise
-const user3 = await cached(42);  // Reuses same Promise
+const a = fetchUser(42);
+const b = fetchUser(42);
+const c = fetchUser(42);
+
+await Promise.all([a, b, c]); // fetchUser ran 3 times
 ```
+
+With `fluxcache`, concurrent calls with the same arguments share one Promise:
+
+```js
+import { cache } from "fluxcache";
+
+const getUser = cache(fetchUser, { ttl: 30_000 });
+
+const a = getUser(42);
+const b = getUser(42);
+const c = getUser(42);
+
+await Promise.all([a, b, c]); // fetchUser ran once
+```
+
+After the Promise resolves, the value stays cached until its TTL expires. If SWR is enabled, expired values can be returned instantly while a refresh happens in the background.
+
+## Why This Exists
+
+Small apps and libraries often need caching before they need a full data-fetching framework.
+
+You may have:
+
+- Multiple callers requesting the same async result at the same time
+- Expensive functions that should not rerun for every identical input
+- API responses that can be reused briefly
+- Dynamic data where stale data is better than waiting
+- A need to see basic cache health without wiring observability yourself
+
+`fluxcache` is the tiny layer for that job: cache any function, dedupe in-flight work, keep values fresh enough, and move on.
+
+It is **not** a replacement for React Query, SWR, Apollo, Relay, or a full client-side data layer. Use those when you need UI-aware fetching, retries, mutations, invalidation graphs, persistence, pagination, or cache synchronization. Use `fluxcache` when you want to cache any sync or async function in any JavaScript environment.
 
 ## Install
 
@@ -33,189 +67,256 @@ const user3 = await cached(42);  // Reuses same Promise
 npm install fluxcache
 ```
 
-## Why flux cache?
-
-- **Zero configuration** — Drop in a single line, works immediately
-- **Automatic deduplication** — Concurrent requests for the same data reuse the same Promise
-- **Stale-while-revalidate** — Returns cached data instantly while refreshing in the background
-- **Built-in observability** — Track hits, misses, hitRate, and revalidations with `stats()`
-- **Deep key generation** — Handles complex arguments: objects, nested data, circular references
-- **Lightweight** — 1.2KB gzipped, no external dependencies
-
-## Usage
+## Quick Start
 
 ```js
 import { cache } from "fluxcache";
 
-const getUser = cache(
-  async (id) => {
-    const response = await fetch(`/api/users/${id}`);
+async function fetchUser(id) {
+  const response = await fetch(`/api/users/${id}`);
+  if (!response.ok) throw new Error("Failed to load user");
+  return response.json();
+}
+
+const getUser = cache(fetchUser, {
+  ttl: 60_000,
+  swr: true
+});
+
+const user = await getUser("u_123");
+```
+
+The returned function has the same call signature as the original function, plus cache helpers:
+
+```js
+getUser.clear();
+getUser.delete("u_123");
+getUser.stats();
+getUser.resetStats();
+```
+
+## Real-World Examples
+
+### API Fetch
+
+```js
+import { cache } from "fluxcache";
+
+export const getRepo = cache(
+  async (owner, repo) => {
+    const response = await fetch(`https://api.github.com/repos/${owner}/${repo}`);
+    if (!response.ok) throw new Error("GitHub request failed");
     return response.json();
   },
-  { ttl: 30_000 }
+  {
+    ttl: 5 * 60_000,
+    swr: true
+  }
 );
 
-const a = getUser(42);
-const b = getUser(42);
-
-console.log(a === b); // true
+const repo = await getRepo("Sampad6701", "flux-cache");
 ```
 
-## Stale-While-Revalidate
+### Next.js / Node Route Handler
 
-Returns cached data instantly while refreshing in the background—perfect for dynamic data.
+Cache expensive work at module scope so requests can reuse it while the process is alive:
 
 ```js
-const getData = cache(
-  async () => fetch("/api/data").then(r => r.json()),
-  { ttl: 30_000, swr: true }  // swr is default
+import { cache } from "fluxcache";
+
+const getProfile = cache(
+  async (userId) => {
+    const response = await fetch(`https://api.example.com/users/${userId}`);
+    if (!response.ok) throw new Error("Profile request failed");
+    return response.json();
+  },
+  { ttl: 30_000, swr: true }
 );
 
-// First call
-const data1 = await getData();
+export async function GET(request) {
+  const url = new URL(request.url);
+  const userId = url.searchParams.get("userId");
 
-// At 31 seconds: returns stale data immediately, revalidates in background
-const data2 = await getData();
+  const profile = await getProfile(userId);
 
-// Backend call happens silently, next call gets fresh data
+  return Response.json(profile);
+}
 ```
 
-## Features
+### Custom Key
 
-- **Deduplicates concurrent async calls** — Multiple requests for the same data reuse the same Promise
-- **Stale-while-revalidate (SWR)** — Background revalidation for instant responses with fresh data
-- **Cache statistics** — Built-in tracking: hits, misses, hitRate, size, revalidations
-- Works with sync and async functions
-- Deep stable key generation with automatic object normalization
-- TTL-based expiration (milliseconds)
-- Errors and rejections are never cached
-- Custom key generation support
-- Manual cleanup with `clear()` and `delete()`
-- Handles circular references and complex objects safely
-- Automatic probabilistic cleanup for long-running processes
-
-## API
+The default key generator deeply serializes arguments with stable object key ordering. Use `key` when only part of the input should affect caching, or when you want to normalize arguments yourself.
 
 ```js
-const cached = cache(fn, options);
-```
+import { cache } from "fluxcache";
 
-Options:
-
-- `ttl` - Cache lifetime in ms. Default: `Infinity`
-- `key` - Custom key generator. Default: POJO/array deep stable serialization
-- `swr` - Enable stale-while-revalidate background revalidation. Default: `true`
-- `onHit` - Called when cached value is reused
-- `onMiss` - Called when fn executes
-
-Methods:
-
-- `cached.clear()` - Remove all entries
-- `cached.delete(...args)` - Remove single entry by arguments
-- `cached.stats()` - Get cache statistics (hits, misses, hitRate, size, etc.)
-- `cached.resetStats()` - Reset all statistics counters
-
-## Examples
-
-Sync memoization:
-
-```js
-const square = cache((n) => n * n);
-square(5); // 25
-square(5); // cache hit
-```
-
-Custom key:
-
-```js
-const findUser = cache(
-  (user) => user.name,
-  { key: (user) => user.id }
-);
-```
-
-Real-world custom key example:
-
-```js
-// Without custom key, [POST /users?filter=active], [GET /users?filter=active]
-// would be different cache entries even though they're semantically similar
-const fetchUsers = cache(
-  async (endpoint, query) => {
-    const res = await fetch(`${endpoint}?${new URLSearchParams(query)}`);
-    return res.json();
+const searchUsers = cache(
+  async ({ orgId, query, page = 1 }) => {
+    const params = new URLSearchParams({ q: query, page });
+    const response = await fetch(`/api/orgs/${orgId}/users?${params}`);
+    return response.json();
   },
   {
-    // Normalize query params to consistent key
-    key: (endpoint, query) => `${endpoint}:${JSON.stringify(query)}`
+    ttl: 10_000,
+    key: ({ orgId, query, page = 1 }) =>
+      `${orgId}:${query.trim().toLowerCase()}:${page}`
   }
 );
 ```
 
-Hooks:
+### Stats
 
 ```js
-const read = cache(expensiveOp, {
-  onHit: (key) => console.log("reused:", key),
-  onMiss: (key) => console.log("executed:", key)
+import { cache } from "fluxcache";
+
+const readConfig = cache(loadConfig, { ttl: 60_000 });
+
+await readConfig("app");
+await readConfig("app");
+await readConfig("admin");
+
+console.log(readConfig.stats());
+```
+
+Example shape:
+
+```js
+{
+  hits: 1,
+  valueHits: 1,
+  promiseHits: 0,
+  misses: 2,
+  total: 3,
+  hitRate: 0.3333,
+  size: 2,
+  revalidations: 0
+}
+```
+
+## API Reference
+
+### `cache(fn, options?)`
+
+Wraps `fn` and returns a cached function.
+
+```js
+import { cache } from "fluxcache";
+
+const cached = cache(fn, options);
+```
+
+`fn` must be a function. It can return a value or a Promise. Rejected Promises and thrown errors are not cached.
+
+### Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `ttl` | `number` | `Infinity` | Cache lifetime in milliseconds. Must be non-negative. |
+| `swr` | `boolean` | `true` | Return stale async values immediately after TTL expiry while refreshing in the background. |
+| `key` | `(...args) => string` | stable deep key | Custom cache key generator. |
+| `onHit` | `(key) => void` | `undefined` | Called when a cached value or in-flight Promise is reused. |
+| `onMiss` | `(key) => void` | `undefined` | Called when the original function executes. |
+
+### Methods
+
+The cached function includes these methods:
+
+| Method | Description |
+| --- | --- |
+| `clear()` | Remove all entries from this cache. |
+| `delete(...args)` | Remove one entry using the same arguments passed to the cached function. Returns `true` if an entry was removed. |
+| `stats()` | Return cache statistics: `hits`, `misses`, `hitRate`, `size`, `revalidations`, and more. |
+| `resetStats()` | Reset counters while keeping cached entries. |
+
+## TTL and SWR Behavior
+
+### Fresh Values
+
+If a cached entry exists and its TTL has not expired, `fluxcache` returns it immediately.
+
+```js
+const getPost = cache(fetchPost, { ttl: 30_000 });
+
+await getPost(1); // miss
+await getPost(1); // hit
+```
+
+### Concurrent Promises
+
+If the original function returns a Promise, concurrent calls with the same key reuse the same in-flight Promise.
+
+```js
+const getPost = cache(fetchPost);
+
+const a = getPost(1);
+const b = getPost(1);
+
+console.log(a === b); // true
+```
+
+### Stale-While-Revalidate
+
+With `swr: true`, expired async values are returned immediately while `fluxcache` refreshes them in the background.
+
+```js
+const getFeed = cache(fetchFeed, {
+  ttl: 15_000,
+  swr: true
 });
+
+await getFeed(); // miss, fetches fresh data
+
+// After 15 seconds:
+await getFeed(); // returns stale value immediately, refreshes in background
 ```
 
-Cache statistics:
+When the background refresh resolves, the cache stores the fresh value for the next call. If the refresh rejects, the stale value remains available for a later attempt.
+
+With `swr: false`, expired entries behave like normal misses: the stale entry is removed and the caller waits for the function to run again.
+
+### TTL Values
+
+- `ttl: Infinity` is the default. Entries do not expire unless removed manually.
+- `ttl: 0` deduplicates in-flight async calls but does not persist resolved values.
+- Finite TTLs are in milliseconds.
+
+## Keys
+
+By default, keys are generated from all arguments using deep stable serialization.
 
 ```js
-const fn = cache(slowFn, { ttl: 60_000 });
-
-// Use cache...
-fn(1);
-fn(1);
-fn(2);
-fn(1);
-
-const stats = fn.stats();
-console.log(stats);
-// {
-//   hits: 2,
-//   misses: 2,
-//   total: 4,
-//   hitRate: 0.5,
-//   size: 2,
-//   valueHits: 2,
-//   promiseHits: 0,
-//   revalidations: 0
-// }
-
-fn.resetStats();  // Clear counters, keep cache
+cached({ a: 1, b: 2 });
+cached({ b: 2, a: 1 }); // same key
 ```
 
-## Notes
+Nested objects are supported, and circular references are handled safely. For class instances, functions, large objects, or domain-specific equality, provide a custom `key`.
 
-**Key Serialization**
+## Memory and Cleanup
 
-Default key function uses deep stable serialization that automatically normalizes object keys and handles circular references:
+Each cached wrapper owns an internal `Map`. Entries stay there until one of these happens:
 
-- `{ a: 1, b: 2 }` and `{ b: 2, a: 1 }` produce the *same* cache key (keys are sorted)
-- Circular objects are safely detected and tagged with unique identifiers
-- For non-serializable arguments (custom class instances, functions), provide a custom `key` function
+- The entry expires and is cleaned up lazily on access
+- Automatic cleanup runs after cache operations
+- You call `delete(...args)`
+- You call `clear()`
 
-**TTL and Stale-While-Revalidate**
+For long-running processes with many unique keys:
 
-- `ttl: Infinity` (default) — Cache never expires unless manually cleared
-- `ttl: 0` — Deduplicates concurrent calls but doesn't persist results; expires immediately
-- `swr: true` (default) — Returns stale value while revalidating in the background
-- `swr: false` — Traditional cache behavior; waits for revalidation before returning
-- Expired entries are removed lazily on next access; automatic cleanup runs every 100 cache operations
+- Prefer finite `ttl` values
+- Normalize high-cardinality inputs with `key`
+- Clear caches during lifecycle events when appropriate
+- Avoid caching unbounded user-specific inputs unless that is intentional
 
-**Statistics**
+## Small on Purpose
 
-- Use `cached.stats()` to monitor cache health: hits, misses, hitRate, size, revalidations
-- Separate tracking for `valueHits` (sync cached values) and `promiseHits` (concurrent async calls)
-- Call `cached.resetStats()` to clear statistics without clearing the cache
+`fluxcache` is for caching function results, not managing application data.
 
-**Memory Management**
+Reach for `fluxcache` when you want:
 
-For long-running processes with many unique keys, consider:
+- One-line async deduplication
+- TTL and SWR around any function
+- Stable keys for object arguments
+- Cache stats without a framework
+- A tiny, dependency-free package
 
-- Using finite TTLs to allow automatic cleanup
-- Periodically calling `cached.clear()` to reset the cache
-- Using a custom `key` function to normalize arguments and reduce cache entropy
-- Disabling SWR with `{ swr: false }` if background revalidation is not needed
+Reach for a larger data-fetching library when your UI needs query invalidation, mutations, retries, request cancellation, pagination, persistence, or cross-component cache orchestration.
